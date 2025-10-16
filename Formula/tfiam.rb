@@ -9,19 +9,12 @@ class Tfiam < Formula
   depends_on "python@3.11"
 
   def install
-    # Install Python dependencies
-    system "python3.11", "-m", "pip", "install", "openai>=1.0.0", "pbr>=1.7.5"
+    # Install the package with dependencies
+    system "python3.11", "-m", "pip", "install", ".", "--prefix=#{prefix}"
 
-    # Copy the entire project to libexec
-    libexec.install Dir["*"]
-
-    # Create a wrapper script
-    (bin/"tfiam").write <<~EOS
-      #!/bin/bash
-      exec "#{libexec}/tfiam_standalone.py" "$@"
-    EOS
-
-    chmod 0755, bin/"tfiam"
+    # The entry point should be automatically created by setuptools
+    # But let's ensure it exists
+    bin.install_symlink libexec/"bin/tfiam"
   end
 
   test do

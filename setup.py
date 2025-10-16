@@ -15,6 +15,8 @@ setup(
     description="TFIAM - Analyze Terraform repositories and generate IAM permission recommendations with AI explanations",
     long_description=long_description,
     long_description_content_type="text/markdown",
+    packages=["tfiam", "tfiam.core", "tfiam.utils", "tfiam.cli"],
+    package_dir={"": "src"},
     py_modules=["main"],
     classifiers=[
         "Development Status :: 4 - Beta",
