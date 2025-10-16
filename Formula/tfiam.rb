@@ -12,13 +12,15 @@ class Tfiam < Formula
     # Install Python dependencies
     system "python3.11", "-m", "pip", "install", "openai>=1.0.0", "pbr>=1.7.5"
 
-    # Install the TFIAM package
+    # Install the TFIAM package with proper structure
     system "python3.11", "-m", "pip", "install", ".", "--prefix=#{prefix}"
 
-    # Create executable script
-    bin.install "main.py" => "tfiam"
+    # Create a wrapper script that properly sets up the environment
+    (bin/"tfiam").write <<~EOS
+      #!/bin/bash
+      exec "#{prefix}/bin/python3.11" "#{prefix}/lib/python3.11/site-packages/main.py" "$@"
+    EOS
 
-    # Make it executable
     chmod 0755, bin/"tfiam"
   end
 
