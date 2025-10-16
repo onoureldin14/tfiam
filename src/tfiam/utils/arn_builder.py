@@ -1,14 +1,16 @@
 """ARN building utilities for AWS resources."""
 
-from typing import Optional
+from typing import List, Optional, Union
 
 
 class ARNBuilder:
     """Utility class for building AWS ARNs."""
 
     @staticmethod
-    def build_specific_arn(service: str, resource_type: str, resource_name: str) -> Optional[str]:
-        """Build specific ARN for a resource if possible."""
+    def build_specific_arn(
+        service: str, resource_type: str, resource_name: str
+    ) -> Union[str, List[str], None]:
+        """Build specific ARN for a resource if possible. Returns list for S3 buckets."""
         arn_templates = {
             "iam": {
                 "role": f"arn:aws:iam::${{aws_account}}:role/{resource_name}",
@@ -33,7 +35,13 @@ class ARNBuilder:
         }
 
         if service in arn_templates and resource_type in arn_templates[service]:
-            return arn_templates[service][resource_type]
+            arn = arn_templates[service][resource_type]
+
+            # For S3 buckets, return both bucket and bucket/* ARNs
+            if service == "s3" and resource_type == "bucket":
+                return [arn, f"{arn}/*"]
+
+            return arn
 
         # Generic ARN for unknown services
         return f"arn:aws:{service}:${{aws_region}}:${{aws_account}}:{resource_type}/{resource_name}"

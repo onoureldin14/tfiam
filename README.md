@@ -5,11 +5,18 @@ A powerful, modular tool that scans Terraform repositories and recommends IAM pe
 ## 🌟 Features
 
 - 🔍 **Smart Analysis**: Automatically scans Terraform files to identify AWS resources
-- 🤖 **AI Explanations**: Uses OpenAI to provide detailed explanations for each permission set
+- 🤖 **AI-Powered Analysis**: OpenAI integration for explanations, verification & optimization
+- 🔍 **Policy Verification**: AI cross-references IAM policies with Terraform code
+- 🚀 **AI Optimization**: Generates optimized IAM policies with security best practices
+- 📦 **Intelligent Caching**: Caches AI responses to save costs and improve performance
+- 💾 **Cache Management**: Interactive cache clearing for fresh analysis when needed
+- 🔐 **Secure API Key Input**: Masked API key display with first 5 characters visible
 - 📋 **Comprehensive Coverage**: Supports 40+ AWS services with detailed permissions
 - 🎯 **Scoped Permissions**: Generates resource-specific ARNs with dynamic account and region placeholders
+- 📁 **Directory Auto-Completion**: TAB completion for Terraform directory selection
 - 🏗️ **Modular Architecture**: Clean, maintainable codebase with proper separation of concerns
 - 📊 **Multiple Output Formats**: JSON policy output and detailed Markdown reports
+- 🎨 **Cyberpunk CLI**: Futuristic terminal interface with colors and animations
 - 🏠 **Homebrew Integration**: Easy installation via Homebrew
 
 ## 📁 Project Structure
@@ -24,20 +31,18 @@ tf-ai-permssions/
 │   │   └── openai_analyzer.py # AI integration (65 lines)
 │   ├── utils/           # Utility functions
 │   │   ├── aws_permissions.py # Comprehensive AWS permissions (704 lines)
-│   │   └── arn_builder.py    # ARN building utilities (80 lines)
+│   │   ├── arn_builder.py    # ARN building utilities (80 lines)
+│   │   └── cache.py          # AI response caching system
 │   └── cli/             # CLI components
 │       └── cyber_cli.py      # Cyberpunk-themed interface (94 lines)
 ├── tests/               # Comprehensive test suite
 │   ├── test_analyzer.py      # Tests for TerraformAnalyzer
 │   ├── test_policy_generator.py # Tests for PolicyGenerator
 │   └── test_utils.py         # Tests for utility modules
-├── scripts/             # Utility scripts
-│   ├── demo.sh              # Basic demonstration script
-│   ├── demo-futuristic.sh   # Enhanced demonstration with cyberpunk theme
+├── scripts/             # Essential utility scripts
+│   ├── demo.sh              # Main demonstration script
 │   ├── install.sh           # Installation script for Homebrew
-│   ├── setup-dev.sh         # Development environment setup
-│   ├── test_openai.sh       # OpenAI integration testing
-│   └── tfiam.rb             # Homebrew formula for distribution
+│   └── setup-dev.sh         # Development environment setup
 ├── examples/            # Example Terraform files
 │   ├── test_example.tf      # Comprehensive example with various AWS services
 │   ├── test_grouping.tf     # Tests resource grouping and ARN generation
@@ -59,12 +64,13 @@ tf-ai-permssions/
 - **`models.py`**: Data classes for IAM statements and Terraform resources
 - **`analyzer.py`**: Main Terraform analysis engine with dynamic permission mapping
 - **`policy_generator.py`**: IAM policy generation and report creation
-- **`openai_analyzer.py`**: OpenAI integration for AI-powered explanations
+- **`openai_analyzer.py`**: OpenAI integration for explanations, verification & optimization
 
 ### Utility Modules (`src/tfiam/utils/`)
 
 - **`aws_permissions.py`**: Comprehensive AWS service permissions mapping
 - **`arn_builder.py`**: ARN construction utilities for specific and wildcard resources
+- **`cache.py`**: AI response caching system for cost optimization
 
 ### CLI Components (`src/tfiam/cli/`)
 
@@ -123,20 +129,17 @@ python main.py ./my-terraform-project --output-dir policies --quiet
 # Interactive mode with examples
 python main.py
 
-# Test with included examples
+# Test with comprehensive example (includes all features)
 python main.py examples/ -no-ai
 
-# Test with comprehensive example
+# Test with individual feature files
 python main.py examples/test_example.tf -no-ai
-
-# Test with variables and locals
 python main.py examples/test_with_variables.tf -no-ai
-
-# Test dynamic permissions
 python main.py examples/test_dynamic.tf -no-ai
+python main.py examples/test_grouping.tf -no-ai
 
-# Analyze specific file with AI
-python main.py examples/test_example.tf -ai
+# Analyze with AI
+python main.py examples/ -ai
 
 # Get help
 python main.py --help
@@ -240,6 +243,63 @@ TFIAM supports 40+ AWS services including:
 **Analytics**: Kinesis, Athena, EMR
 **AI/ML**: SageMaker, Comprehend, Rekognition
 
+## 🤖 AI-Powered Features
+
+### Policy Verification & Optimization
+
+TFIAM now includes advanced AI capabilities for comprehensive policy analysis:
+
+#### 🔍 Policy Verification
+
+- **Cross-references** IAM policies with Terraform code
+- **Security assessment** with scoring (0-100)
+- **Permission accuracy** validation
+- **Missing permissions** detection
+- **Best practice** compliance checking
+
+#### 🚀 AI Optimization
+
+- **Generates optimized policies** following least-privilege principles
+- **Reduces permission count** while maintaining functionality
+- **Specific resource ARNs** instead of wildcards
+- **Grouped permissions** for better organization
+- **Security improvements** based on AWS best practices
+
+#### 📦 Intelligent Caching
+
+- **Caches AI responses** to save costs (50-80% savings)
+- **Visual indicators**: 📦 (cached) vs 🌐 (fresh)
+- **Cache management** with interactive clearing option
+- **Multiple cache types**: statements, verification, optimization
+- **Cost tracking** with estimated savings display
+
+#### 🔐 Secure API Key Management
+
+- **Masked input** with first 5 characters visible for verification
+- **Automatic profile saving** option for convenience
+- **Environment variable** support for CI/CD
+
+### Example AI Analysis Output
+
+```
+🔍 AI Policy Verification Results:
+✅ Policy verification passed
+
+📊 Analysis Statistics:
+  Security Score: 85/100
+  Complexity Score: 75/100
+  Specific Resources: 24
+  Wildcard Resources: 8
+
+💡 Optimization Suggestions:
+  • Group similar EC2 permissions into single statements
+  • Use specific S3 bucket ARNs instead of wildcards
+
+🚀 AI Optimization Available!
+📊 Analysis found 12 optimization opportunities
+🎯 Reduced permissions by 45 (32.1%)
+```
+
 ## 📋 Output Formats
 
 ### JSON Policy
@@ -264,9 +324,35 @@ TFIAM supports 40+ AWS services including:
 }
 ```
 
-### Markdown Report
+### AI-Optimized Policy
 
-Detailed analysis with AI explanations, security notes, and service breakdowns.
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "OptimizedS3Permissions",
+      "Effect": "Allow",
+      "Action": [
+        "s3:CreateBucket",
+        "s3:DeleteBucket",
+        "s3:ListBucket",
+        "s3:GetObject",
+        "s3:PutObject"
+      ],
+      "Resource": [
+        "arn:aws:s3:::my-specific-bucket",
+        "arn:aws:s3:::my-specific-bucket/*"
+      ]
+    }
+  ]
+}
+```
+
+### Markdown Reports
+
+- **`tf-ai-permissions-report.md`**: Detailed analysis with AI explanations and verification results
+- **`tf-ai-permissions-optimization-report.md`**: Optimization analysis and recommendations
 
 ## 🔧 Configuration
 
@@ -276,35 +362,68 @@ Detailed analysis with AI explanations, security notes, and service breakdowns.
 
 ### Command Line Options
 
-- `-ai`: Enable AI explanations (requires OpenAI API key)
+- `-ai`: Enable AI explanations + verification & optimization (requires OpenAI API key)
 - `-no-ai`: Skip AI analysis (default)
 - `--output-dir DIR`: Output directory (default: tfiam-output)
 - `--quiet, -q`: Minimal output
 - `--help, -h`: Show help message
 
+### AI Features Usage
+
+```bash
+# Basic analysis with AI explanations
+python main.py ./terraform-dir -ai
+
+# Interactive mode with cache management
+python main.py
+
+# Generate optimized policy after analysis
+# (prompted automatically when using -ai flag)
+```
+
 ### Interactive Mode
 
 When run without arguments, TFIAM enters interactive mode and guides you through:
 
-- Directory selection
-- AI analysis preference
-- Output directory configuration
-- Quiet mode setting
-- OpenAI API key management (if needed)
-- Future command generation
+- **Directory selection** with TAB auto-completion
+- **AI analysis preference** (explanations + verification & optimization)
+- **Cache management** (clear cache for fresh analysis)
+- **Output directory** configuration
+- **Quiet mode** setting
+- **OpenAI API key** management with secure masked input
+- **Future command** generation for reproducibility
+
+#### Interactive Experience Example
+
+```
+🌐 Welcome to TFIAM Interactive Mode!
+📁 Enter the path to your Terraform directory (use . for current directory):
+✅ Found 3 Terraform file(s) in './examples'
+
+🤖 AI Analysis Options:
+1. Enable AI explanations + verification & optimization (requires OpenAI API key)
+2. Skip AI analysis (faster, basic explanations)
+
+💾 Cache Management:
+TFIAM caches AI responses to save costs. If you've made significant changes
+to your Terraform code, you may want to clear the cache to get fresh AI
+analysis (this will incur extra costs).
+Would you like to clear the AI cache? (y/n): n
+✅ Using cached responses where available
+
+📂 Output directory (press Enter for 'tfiam-output'):
+🔇 Quiet mode? (y/n): n
+```
 
 ## 📚 Scripts Directory
 
-This directory contains various utility scripts for TFIAM:
+This directory contains essential utility scripts for TFIAM:
 
 ### Scripts
 
-- **`demo.sh`** - Basic demonstration script
-- **`demo-futuristic.sh`** - Enhanced demonstration with cyberpunk theme
-- **`install.sh`** - Installation script for Homebrew
-- **`setup-dev.sh`** - Development environment setup
-- **`test_openai.sh`** - OpenAI integration testing
-- **`tfiam.rb`** - Homebrew formula for distribution
+- **`demo.sh`** - Main demonstration script showcasing TFIAM capabilities
+- **`install.sh`** - Installation script for Homebrew distribution
+- **`setup-dev.sh`** - Development environment setup with pre-commit hooks
 
 ### Usage
 
@@ -312,12 +431,8 @@ This directory contains various utility scripts for TFIAM:
 # Development Setup
 ./scripts/setup-dev.sh
 
-# Demo
+# Demo the tool
 ./scripts/demo.sh
-./scripts/demo-futuristic.sh
-
-# OpenAI Testing
-./scripts/test_openai.sh
 
 # Installation
 ./scripts/install.sh

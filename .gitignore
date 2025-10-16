@@ -187,4 +187,5 @@ temp/
 # Pre-commit
 .pre-commit-config.yaml.bak
 
-tfiam-output/
+**/tfiam-output/
+.tfiam-cache/

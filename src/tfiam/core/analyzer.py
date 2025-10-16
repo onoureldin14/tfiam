@@ -3,7 +3,7 @@
 import os
 import re
 from collections import Counter
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, Union
 
 from ..utils.arn_builder import ARNBuilder
 from ..utils.aws_permissions import AWS_PERMISSIONS
@@ -22,22 +22,26 @@ class TerraformAnalyzer:
         self.service_permissions = AWS_PERMISSIONS
 
     def scan_directory(self, directory: str) -> None:
-        """Scan directory for Terraform files."""
+        """Scan directory for Terraform files (only in the specified directory, not subdirectories)."""
         tf_files = []
-        for root, dirs, files in os.walk(directory):
-            # Skip hidden directories and common non-Terraform directories
-            dirs[:] = [
-                d
-                for d in dirs
-                if not d.startswith(".") and d not in ["node_modules", "venv", "__pycache__"]
-            ]
 
+        # Only scan the specified directory, not subdirectories
+        try:
+            files = os.listdir(directory)
             for file in files:
                 if file.endswith(".tf"):
-                    tf_files.append(os.path.join(root, file))
+                    file_path = os.path.join(directory, file)
+                    if os.path.isfile(file_path):
+                        tf_files.append(file_path)
+        except OSError as e:
+            print(f"Error accessing directory {directory}: {e}")
+            return
 
         for tf_file in tf_files:
             self.parse_terraform_file(tf_file)
+
+        # Resolve for_each resources after all files are parsed
+        self.resources = self.resolve_for_each_resources(self.resources)
 
     def parse_terraform_file(self, file_path: str) -> None:
         """Parse a single Terraform file."""
@@ -68,69 +72,106 @@ class TerraformAnalyzer:
                 default_value = default_match.group(1).strip().strip("\"'")
                 self.variables[f"var.{var_name}"] = default_value
 
-        # Extract locals - handle nested braces properly
+        # Extract locals - improved parsing with better brace matching
         locals_pattern = r"locals\s*\{(.*?)\n\}"
         for match in re.finditer(locals_pattern, content, re.MULTILINE | re.DOTALL):
             locals_content = match.group(1)
 
-            # Parse line by line with brace counting
+            # Parse each local definition more carefully
             lines = locals_content.split("\n")
-            brace_count = 0
             current_local = None
             current_value = []
+            brace_count = 0
 
             for line in lines:
                 stripped = line.strip()
                 if not stripped or stripped.startswith("#"):
                     continue
 
-                # Count braces
+                # Count braces to handle nested structures
                 brace_count += stripped.count("{") - stripped.count("}")
 
                 # Check for new local definition (at brace level 0)
                 if brace_count == 0 and "=" in stripped:
                     # Save previous local if exists
                     if current_local and current_value:
-                        full_value = " ".join(current_value).strip().strip("\"'")
+                        full_value = "\n".join(current_value).strip().strip("\"'")
                         if full_value.endswith(","):
                             full_value = full_value[:-1]
                         self.locals[f"local.{current_local}"] = full_value
 
                     # Parse new local
-                    parts = stripped.split("=", 1)
-                    if len(parts) == 2:
-                        current_local = parts[0].strip()
-                        current_value = [parts[1].strip()]
-                    continue
-
-                # Add to current value if we're in a local
-                if current_local is not None:
-                    current_value.append(stripped)
+                    eq_pos = stripped.find("=")
+                    if eq_pos > 0:
+                        current_local = stripped[:eq_pos].strip()
+                        value_part = stripped[eq_pos + 1 :].strip()
+                        current_value = [value_part]
+                        brace_count += value_part.count("{") - value_part.count("}")
+                else:
+                    # Continue current local value
+                    if current_local:
+                        current_value.append(stripped)
 
             # Save last local
             if current_local and current_value:
-                full_value = " ".join(current_value).strip().strip("\"'")
+                full_value = "\n".join(current_value).strip().strip("\"'")
                 if full_value.endswith(","):
                     full_value = full_value[:-1]
                 self.locals[f"local.{current_local}"] = full_value
 
     def resolve_variable_reference(self, value: str) -> str:
-        """Resolve variable and local references."""
+        """Resolve variable and local references with better interpolation support."""
         if not isinstance(value, str):
             return str(value)
 
         result = value
 
-        # Handle variable references
-        var_pattern = r"\$\{var\.([^}]+)\}"
-        for var_match in re.finditer(var_pattern, value):
+        # Handle complex string interpolation with multiple variables/locals
+        # Pattern: ${var.name} or ${local.name} or ${var.name}-${local.other}
+        interpolation_pattern = r"\$\{([^}]+)\}"
+
+        def replace_interpolation(match):
+            expression = match.group(1)
+
+            # Handle variable references
+            if expression.startswith("var."):
+                var_name = expression
+                if var_name in self.variables:
+                    return self.variables[var_name]
+
+            # Handle local references
+            elif expression.startswith("local."):
+                local_name = expression
+                if local_name in self.locals:
+                    return self.resolve_variable_reference(self.locals[local_name])
+
+            # Handle resource references (like aws_vpc.main.id)
+            elif "." in expression:
+                parts = expression.split(".")
+                if len(parts) >= 2:
+                    resource_type = parts[0]
+                    resource_name = parts[1]
+                    # Try to find a matching resource and return a placeholder
+                    for res in self.resources:
+                        if res.type == f"aws_{resource_type}" and res.name == resource_name:
+                            return f"${{{expression}}}"  # Keep as placeholder for now
+
+            # Return original if we can't resolve
+            return match.group(0)
+
+        # Apply interpolation replacement
+        result = re.sub(interpolation_pattern, replace_interpolation, result)
+
+        # Handle simple variable references (without ${})
+        var_pattern = r"var\.([a-zA-Z_][a-zA-Z0-9_]*)"
+        for var_match in re.finditer(var_pattern, result):
             var_name = f"var.{var_match.group(1)}"
             if var_name in self.variables:
                 result = result.replace(var_match.group(0), self.variables[var_name])
 
-        # Handle local references
-        local_pattern = r"\$\{local\.([^}]+)\}"
-        for local_match in re.finditer(local_pattern, value):
+        # Handle simple local references (without ${})
+        local_pattern = r"local\.([a-zA-Z_][a-zA-Z0-9_]*)"
+        for local_match in re.finditer(local_pattern, result):
             local_name = f"local.{local_match.group(1)}"
             if local_name in self.locals:
                 resolved = self.resolve_variable_reference(self.locals[local_name])
@@ -138,22 +179,64 @@ class TerraformAnalyzer:
 
         # Handle data source references
         data_pattern = r"\$\{data\.([^}]+)\}"
-        for data_match in re.finditer(data_pattern, value):
+        for data_match in re.finditer(data_pattern, result):
             # For now, just replace with a placeholder
             result = result.replace(data_match.group(0), f"{data_match.group(1)}-*")
 
         return result
 
+    def expand_for_each_values(self, value: str) -> List[str]:
+        """Expand for_each values to show all possible values instead of ${each.value}."""
+        if "${each.value}" not in value:
+            return [value]
+
+        # For now, we'll return a placeholder that indicates this is a for_each resource
+        # In a more advanced implementation, we could parse the for_each expression
+        # and expand it based on the actual values
+        return [value.replace("${each.value}", "*")]
+
+    def resolve_for_each_resources(
+        self, resources: List[TerraformResource]
+    ) -> List[TerraformResource]:
+        """Handle for_each resources by filtering them out since we can't resolve the actual values."""
+        expanded_resources = []
+
+        for resource in resources:
+            if resource.resource_name and "${each.value}" in resource.resource_name:
+                # Skip for_each resources since we can't resolve the actual values
+                # This prevents generating wildcard ARNs that are too broad
+                continue
+            else:
+                expanded_resources.append(resource)
+
+        return expanded_resources
+
     def extract_resources(self, content: str, file_path: str) -> None:
         """Extract AWS resources from Terraform content."""
-        resource_pattern = (
-            r'resource\s+["\']([^"\']+)["\']\s+["\']([^"\']+)["\']\s*\{([^}]*(?:\{[^}]*\}[^}]*)*)\}'
-        )
+        # Find resource blocks manually to handle nested braces properly
+        resource_pattern = r'resource\s+["\']([^"\']+)["\']\s+["\']([^"\']+)["\']\s*\{'
 
-        for match in re.finditer(resource_pattern, content, re.MULTILINE | re.DOTALL):
+        for match in re.finditer(resource_pattern, content, re.MULTILINE):
             resource_type = match.group(1)
             resource_name = match.group(2)
-            resource_content = match.group(3)
+
+            # Find the matching closing brace
+            start_pos = match.end()
+            brace_count = 1
+            pos = start_pos
+
+            while pos < len(content) and brace_count > 0:
+                if content[pos] == "{":
+                    brace_count += 1
+                elif content[pos] == "}":
+                    brace_count -= 1
+                pos += 1
+
+            if brace_count == 0:
+                resource_content = content[start_pos : pos - 1]
+            else:
+                # Malformed resource block, skip
+                continue
 
             if resource_type.startswith("aws_"):
                 # Extract resource properties
@@ -181,21 +264,71 @@ class TerraformAnalyzer:
                 self.aws_services.add(service)
 
     def _extract_resource_properties(self, content: str) -> Dict[str, str]:
-        """Extract key-value pairs from resource content."""
+        """Extract key-value pairs from resource content with better parsing."""
         properties = {}
 
-        # Simple key-value extraction (handles basic cases)
+        # More sophisticated parsing that handles complex Terraform syntax
         lines = content.split("\n")
+        current_key = None
+        current_value = []
+        brace_count = 0
+
         for line in lines:
             line = line.strip()
-            if "=" in line and not line.startswith("#"):
-                parts = line.split("=", 1)
-                if len(parts) == 2:
-                    key = parts[0].strip()
-                    value = parts[1].strip().strip("\"'")
+            if not line or line.startswith("#"):
+                continue
+
+            # Handle multi-line values and nested structures
+            if brace_count > 0:
+                current_value.append(line)
+                brace_count += line.count("{") - line.count("}")
+                if brace_count == 0:
+                    # End of nested structure
+                    if current_key:
+                        value_str = "\n".join(current_value).strip()
+                        properties[current_key] = value_str
+                        current_key = None
+                        current_value = []
+                continue
+
+            # Handle key-value pairs
+            if "=" in line:
+                # Find the first = that's not inside quotes
+                eq_pos = -1
+                in_quotes = False
+                quote_char = None
+
+                for i, char in enumerate(line):
+                    if char in ['"', "'"] and (i == 0 or line[i - 1] != "\\"):
+                        if not in_quotes:
+                            in_quotes = True
+                            quote_char = char
+                        elif char == quote_char:
+                            in_quotes = False
+                            quote_char = None
+                    elif char == "=" and not in_quotes:
+                        eq_pos = i
+                        break
+
+                if eq_pos > 0:
+                    key = line[:eq_pos].strip()
+                    value = line[eq_pos + 1 :].strip()
+
+                    # Handle trailing comma
                     if value.endswith(","):
                         value = value[:-1]
-                    properties[key] = value
+
+                    # Check if value starts a nested structure or contains interpolation
+                    if value.endswith("{") or (
+                        "${" in value and value.count("${") > value.count("}")
+                    ):
+                        current_key = key
+                        current_value = [value]
+                        brace_count = value.count("{") - value.count("}")
+                    else:
+                        # Simple value - handle interpolation properly
+                        value = value.strip("\"'")
+                        properties[key] = value
 
         return properties
 
@@ -214,6 +347,21 @@ class TerraformAnalyzer:
             "aws_rds_subnet_group": "name",
             "aws_cloudwatch_log_group": "name",
             "aws_cloudwatch_metric_alarm": "alarm_name",
+            "aws_vpc": "name",  # VPC doesn't have a name property, but let's check
+            "aws_subnet": "name",  # Subnet doesn't have a name property, but let's check
+            "aws_security_group": "name",  # Security group doesn't have a name property, but let's check
+            "aws_internet_gateway": "name",  # IGW doesn't have a name property, but let's check
+            "aws_route53_zone": "name",
+            "aws_route53_record": "name",
+            "aws_cloudfront_distribution": "name",  # CloudFront doesn't have a name property
+            "aws_wafv2_web_acl": "name",
+            "aws_eks_cluster": "name",
+            "aws_dynamodb_table": "name",
+            "aws_elasticache_replication_group": "name",  # Actually "replication_group_id"
+            "aws_api_gateway_rest_api": "name",
+            "aws_api_gateway_resource": "name",  # Actually "path_part"
+            "aws_api_gateway_method": "name",  # Actually "http_method"
+            "aws_sfn_state_machine": "name",
         }
 
         name_prop = name_properties.get(resource_type, "name")
@@ -221,8 +369,19 @@ class TerraformAnalyzer:
         if name_prop in properties:
             raw_value = properties[name_prop]
             resolved_value = self.resolve_variable_reference(raw_value)
-            if resolved_value and resolved_value != raw_value:
+
+            if (
+                resolved_value
+                and resolved_value != raw_value
+                and not resolved_value.startswith("${")
+            ):
                 return resolved_value
+
+        # For resources without explicit names, try to construct a meaningful name
+        # using variables and locals if available
+        if resource_type in ["aws_vpc", "aws_subnet", "aws_security_group", "aws_internet_gateway"]:
+            # These resources don't have name properties, so we'll use tags or construct from context
+            return None  # Let ARN builder handle with wildcards
 
         return terraform_name
 
@@ -248,26 +407,29 @@ class TerraformAnalyzer:
 
                 # Create a key based on service and permissions (not resource type)
                 service_key = aws_service
+                actions_key = tuple(sorted(actions))  # Use sorted tuple as key for consistency
 
                 if service_key not in permission_groups:
                     permission_groups[service_key] = {}
 
-                if actions not in permission_groups[service_key]:
-                    permission_groups[service_key][actions] = {
+                if actions_key not in permission_groups[service_key]:
+                    permission_groups[service_key][actions_key] = {
                         "resources": [],
                         "resource_types": set(),
                         "service": aws_service,
+                        "actions": actions,
                     }
 
-                permission_groups[service_key][actions]["resources"].append(resource)
-                permission_groups[service_key][actions]["resource_types"].add(resource_type)
+                permission_groups[service_key][actions_key]["resources"].append(resource)
+                permission_groups[service_key][actions_key]["resource_types"].add(resource_type)
 
         # Generate statements for each permission group
         for service_key, action_groups in permission_groups.items():
-            for actions, group_info in action_groups.items():
+            for actions_key, group_info in action_groups.items():
                 resources = group_info["resources"]
                 resource_types = list(group_info["resource_types"])
                 aws_service = group_info["service"]
+                actions = group_info["actions"]
 
                 # Create a descriptive SID
                 if len(resource_types) == 1:
@@ -280,11 +442,13 @@ class TerraformAnalyzer:
                 specific_arns = []
                 for resource in resources:
                     resource_arn = self._get_resource_arn_for_resource(aws_service, resource)
-                    if (
-                        resource_arn
-                        and "*" not in resource_arn
-                        and resource_arn not in specific_arns
-                    ):
+
+                    # Handle both single ARN and list of ARNs (for S3 buckets)
+                    if isinstance(resource_arn, list):
+                        for arn in resource_arn:
+                            if arn and arn not in specific_arns:
+                                specific_arns.append(arn)
+                    elif resource_arn and resource_arn not in specific_arns:
                         specific_arns.append(resource_arn)
 
                 # Use specific ARNs if available, otherwise use wildcard
@@ -460,8 +624,10 @@ class TerraformAnalyzer:
         all_permissions = generic_permissions + service_permissions
         return tuple(sorted(all_permissions))
 
-    def _get_resource_arn_for_resource(self, service: str, resource: TerraformResource) -> str:
-        """Get resource ARN for a specific resource."""
+    def _get_resource_arn_for_resource(
+        self, service: str, resource: TerraformResource
+    ) -> Union[str, List[str]]:
+        """Get resource ARN for a specific resource. Returns list for S3 buckets."""
         # Check if we have a specific resource name
         if resource.resource_name and resource.resource_name != resource.name:
             specific_arn = ARNBuilder.build_specific_arn(

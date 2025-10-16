@@ -1,6 +1,43 @@
 """Cyberpunk-themed CLI interface for TFIAM."""
 
+import sys
+import threading
+import time
 from typing import Any, Dict
+
+
+class LoadingSpinner:
+    """Cyberpunk-themed loading spinner for AI operations."""
+
+    def __init__(self, message="Loading", color="\033[96m"):
+        self.message = message
+        self.color = color
+        self.spinner_chars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+        self.running = False
+        self.thread = None
+
+    def _animate(self):
+        """Internal animation loop."""
+        i = 0
+        while self.running:
+            spinner = self.spinner_chars[i % len(self.spinner_chars)]
+            print(f"\r{self.color}{spinner} {self.message}...\033[0m", end="", flush=True)
+            i += 1
+            time.sleep(0.1)
+
+    def start(self):
+        """Start the loading animation."""
+        self.running = True
+        self.thread = threading.Thread(target=self._animate)
+        self.thread.daemon = True
+        self.thread.start()
+
+    def stop(self, success_message="✅ Complete!"):
+        """Stop the loading animation and show completion message."""
+        self.running = False
+        if self.thread:
+            self.thread.join()
+        print(f"\r\033[K{self.color}{success_message}\033[0m")  # Clear line and show completion
 
 
 class CyberCLI:
@@ -19,6 +56,13 @@ class CyberCLI:
     END = "\033[0m"
 
     @staticmethod
+    def create_loading_spinner(message="Loading", color=None):
+        """Create a loading spinner with cyberpunk styling."""
+        if color is None:
+            color = CyberCLI.CYAN
+        return LoadingSpinner(message, color)
+
+    @staticmethod
     def print_header():
         """Print the cyberpunk header."""
         print(f"{CyberCLI.CYAN}{CyberCLI.BOLD}")
@@ -35,6 +79,25 @@ class CyberCLI:
         print("║                                                                              ║")
         print("╚══════════════════════════════════════════════════════════════════════════════╝")
         print(f"{CyberCLI.END}\n")
+
+    @staticmethod
+    def print_ai_processing():
+        """Print AI processing animation."""
+        import sys
+        import time
+
+        print(f"\n{CyberCLI.MAGENTA}🤖 AI Processing...{CyberCLI.END}")
+
+        # Simple loading animation
+        for i in range(3):
+            for char in ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]:
+                sys.stdout.write(
+                    f"\r{CyberCLI.CYAN}{char} Analyzing statements with OpenAI...{CyberCLI.END}"
+                )
+                sys.stdout.flush()
+                time.sleep(0.1)
+
+        print(f"\r{CyberCLI.GREEN}✓ AI analysis complete!{CyberCLI.END}")
 
     @staticmethod
     def print_summary(stats: Dict[str, Any]):
@@ -101,7 +164,7 @@ def print_cyberpunk_help():
     print("║    directory          Path to Terraform repository                          ║")
     print("║                                                                              ║")
     print("║  OPTIONS:                                                                   ║")
-    print("║    -ai                Enable AI explanations (requires OpenAI API key)     ║")
+    print("║    -ai                Enable AI explanations + verification & optimization ║")
     print("║    -no-ai             Skip AI analysis (default)                           ║")
     print("║    --output-dir DIR   Output directory (default: tfiam-output)              ║")
     print("║    --quiet, -q        Minimal output                                       ║")
@@ -116,7 +179,7 @@ def print_cyberpunk_help():
     print("║    python main.py ./infra -no-ai --output-dir policies                     ║")
     print("║                                                                              ║")
     print("║  🌟 TFIAM analyzes Terraform files and generates IAM policies with        ║")
-    print("║     comprehensive AWS permissions and AI-powered explanations!             ║")
+    print("║     AI-powered explanations, verification & optimization!                   ║")
     print("║                                                                              ║")
     print("╚══════════════════════════════════════════════════════════════════════════════╝")
     print(f"{CyberCLI.END}")
