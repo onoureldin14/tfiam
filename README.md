@@ -96,10 +96,11 @@ tf-ai-permssions/
 
 ```bash
 # Via Homebrew (recommended)
-brew install yourusername/tfiam/tfiam
+brew tap onoureldin14/tfiam
+brew install tfiam
 
 # Manual installation
-git clone https://github.com/yourusername/tfiam.git
+git clone https://github.com/onoureldin14/tfiam.git
 cd tfiam
 pip3 install -r requirements.txt
 ```
@@ -151,7 +152,7 @@ python main.py --help
 
 ```bash
 # Clone and setup development environment
-git clone https://github.com/yourusername/tfiam.git
+git clone https://github.com/onoureldin14/tfiam.git
 cd tfiam
 make dev-setup
 ```
@@ -482,6 +483,96 @@ python main.py ./terraform-dir --no-openai --quiet
 python main.py ./terraform-dir --openai-key sk-xxx
 python main.py --help
 ```
+
+## 🍺 Homebrew Distribution
+
+TFIAM is available as a Homebrew formula for easy installation on macOS.
+
+### For Users
+
+```bash
+# Install via Homebrew
+brew tap onoureldin14/tfiam
+brew install tfiam
+
+# Update to latest version
+brew upgrade tfiam
+```
+
+### For Developers - Setting Up Homebrew Tap
+
+If you want to create or maintain the Homebrew tap:
+
+#### Quick Setup
+
+```bash
+# Run the automated setup script
+./scripts/setup-homebrew.sh
+```
+
+This script will:
+- Create a `homebrew-tfiam` directory
+- Set up the tap structure
+- Copy the formula file
+- Provide step-by-step publishing instructions
+
+#### Manual Setup
+
+1. **Create GitHub Repository**:
+   - Go to https://github.com/new
+   - Repository name: `homebrew-tfiam`
+   - Description: "Homebrew tap for TFIAM - Terraform IAM Permission Analyzer"
+   - Make it **Public**
+
+2. **Setup Tap Structure**:
+   ```bash
+   git clone https://github.com/onoureldin14/homebrew-tfiam.git
+   cd homebrew-tfiam
+   cp ../tfiam.rb tfiam.rb
+   ```
+
+3. **Create README for Tap**:
+   ```markdown
+   # Homebrew TFIAM Tap
+
+   ## Installation
+   ```bash
+   brew tap onoureldin14/tfiam
+   brew install tfiam
+   ```
+   ```
+
+4. **Publish the Tap**:
+   ```bash
+   git add .
+   git commit -m "Initial tap setup for TFIAM"
+   git branch -M main
+   git push -u origin main
+   ```
+
+5. **Test Installation**:
+   ```bash
+   brew tap onoureldin14/tfiam
+   brew install tfiam
+   tfiam --help
+   ```
+
+#### Updating the Formula
+
+When you make changes to TFIAM:
+
+1. Update version in `tfiam.rb`
+2. Update SHA256 (Homebrew will show the correct value)
+3. Commit and push to the tap repository
+4. Users can update with `brew upgrade tfiam`
+
+#### Formula Features
+
+- **Python 3.11 dependency** management
+- **Virtual environment** isolation
+- **Automatic dependency** installation
+- **Wrapper script** for easy execution
+- **Built-in test** to verify installation
 
 ## 🤝 Contributing
 
