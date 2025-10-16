@@ -3,18 +3,29 @@ class Tfiam < Formula
   homepage "https://github.com/onoureldin14/tfiam"
   url "https://github.com/onoureldin14/tfiam/archive/refs/heads/main.zip"
   version "1.0.0"
-  sha256 "ca75c849eb62f065b596a7bd12efb1cf6d346b89ed21537877a46292fa19f7d3"
+  sha256 "0ea66217924d89ae64cf2c54c9131c1185852f77b79a2569162b4529d0f37c396"
   license "MIT"
 
   depends_on "python@3.11"
 
   def install
-    # Install the package with dependencies
-    system "python3.11", "-m", "pip", "install", ".", "--prefix=#{prefix}"
+    # Create virtual environment
+    venv = virtualenv_create(libexec, "python3.11")
 
-    # The entry point should be automatically created by setuptools
-    # But let's ensure it exists
-    bin.install_symlink libexec/"bin/tfiam"
+    # Install Python dependencies from requirements.txt
+    venv.pip_install "openai>=1.0.0"
+    venv.pip_install "pbr>=1.7.5"
+
+    # Install the TFIAM package
+    venv.pip_install_and_link buildpath
+
+    # Create a wrapper script that calls the main.py
+    (bin/"tfiam").write <<~EOS
+      #!/bin/bash
+      exec "#{libexec}/bin/python" "#{libexec}/lib/python3.11/site-packages/main.py" "$@"
+    EOS
+
+    chmod 0755, bin/"tfiam"
   end
 
   test do
