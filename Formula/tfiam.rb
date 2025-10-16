@@ -12,16 +12,13 @@ class Tfiam < Formula
     # Install Python dependencies
     system "python3.11", "-m", "pip", "install", "openai>=1.0.0", "pbr>=1.7.5"
 
-    # Install the TFIAM package with proper structure
-    system "python3.11", "-m", "pip", "install", ".", "--prefix=#{prefix}"
+    # Copy the entire project to libexec
+    libexec.install Dir["*"]
 
-    # Copy the src directory to site-packages
-    cp_r "src", "#{prefix}/lib/python3.11/site-packages/"
-
-    # Create a wrapper script that properly sets up the environment
+    # Create a wrapper script
     (bin/"tfiam").write <<~EOS
       #!/bin/bash
-      exec "#{prefix}/bin/python3.11" "#{prefix}/lib/python3.11/site-packages/main.py" "$@"
+      exec "#{libexec}/tfiam_standalone.py" "$@"
     EOS
 
     chmod 0755, bin/"tfiam"
