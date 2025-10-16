@@ -15,6 +15,9 @@ class Tfiam < Formula
     # Install the TFIAM package with proper structure
     system "python3.11", "-m", "pip", "install", ".", "--prefix=#{prefix}"
 
+    # Copy the src directory to site-packages
+    cp_r "src", "#{prefix}/lib/python3.11/site-packages/"
+
     # Create a wrapper script that properly sets up the environment
     (bin/"tfiam").write <<~EOS
       #!/bin/bash
