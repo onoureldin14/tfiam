@@ -3,7 +3,7 @@ class Tfiam < Formula
   homepage "https://github.com/onoureldin14/tfiam"
   url "https://github.com/onoureldin14/tfiam/archive/refs/heads/main.zip"
   version "1.0.0"
-  sha256 "0ea66217924d89ae64cf2c54c9131c1185852f77b79a2569162b4529d0f37c396"
+  sha256 "87e28304ed06d10cbd071ef04403f79460053ec1a09b87e31eecd95c18c6b633"
   license "MIT"
 
   depends_on "python@3.11"
