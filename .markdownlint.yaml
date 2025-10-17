@@ -1,5 +1,0 @@
-# Markdown linting configuration
-MD013: false  # Line length
-MD033: false  # HTML tags (for emojis)
-MD041: false  # First line should be a heading
-MD024: false  # Multiple headers with the same content

@@ -718,6 +718,11 @@ def show_future_usage(directory, use_ai, output_dir, quiet):
 
 def main():
     """Main entry point for TFIAM."""
+    # Fix working directory for Homebrew installation
+    original_working_dir = os.getenv("ORIGINAL_WORKING_DIR")
+    if original_working_dir and os.path.exists(original_working_dir):
+        os.chdir(original_working_dir)
+
     # Handle help before parsing arguments
     if "--help" in sys.argv or "-h" in sys.argv:
         print_cyberpunk_help()
