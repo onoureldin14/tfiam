@@ -133,6 +133,14 @@ class TerraformAnalyzer:
         def replace_interpolation(match):
             expression = match.group(1)
 
+            # Handle random_id patterns (e.g., ${random_id.suffix.hex})
+            if expression.startswith("random_id."):
+                return "*"  # Replace with wildcard
+
+            # Handle for_each patterns (e.g., ${each.value})
+            if expression.startswith("each."):
+                return "*"  # Replace with wildcard
+
             # Handle variable references
             if expression.startswith("var."):
                 var_name = expression
@@ -370,11 +378,8 @@ class TerraformAnalyzer:
             raw_value = properties[name_prop]
             resolved_value = self.resolve_variable_reference(raw_value)
 
-            if (
-                resolved_value
-                and resolved_value != raw_value
-                and not resolved_value.startswith("${")
-            ):
+            # Return resolved value if it's not a variable reference
+            if resolved_value and not resolved_value.startswith("${"):
                 return resolved_value
 
         # For resources without explicit names, try to construct a meaningful name
@@ -384,6 +389,254 @@ class TerraformAnalyzer:
             return None  # Let ARN builder handle with wildcards
 
         return terraform_name
+
+    def _get_s3_permission_groups(self, resource: TerraformResource) -> List[Dict]:
+        """Analyze S3 resource and return granular permission groups based on features used."""
+        s3_groups = []
+
+        # Always include bucket permissions for S3 bucket resources
+        if resource.type == "aws_s3_bucket":
+            bucket_permissions = self._get_s3_bucket_permissions(resource)
+            if bucket_permissions:
+                s3_groups.append({"type": "bucket", "actions": bucket_permissions})
+
+        # Check for object-related features
+        object_permissions = self._get_s3_object_permissions(resource)
+        if object_permissions:
+            s3_groups.append({"type": "object", "actions": object_permissions})
+
+        return s3_groups
+
+    def _get_s3_bucket_permissions(self, resource: TerraformResource) -> List[str]:
+        """Get S3 bucket permissions based on features used."""
+        bucket_permissions = []
+
+        # Base bucket permissions
+        base_permissions = [
+            "s3:CreateBucket",
+            "s3:DeleteBucket",
+            "s3:ListBucket",
+            "s3:GetBucketLocation",
+        ]
+        bucket_permissions.extend(base_permissions)
+
+        # Analyze resource properties to determine additional permissions needed
+        properties = resource.properties or {}
+
+        # Versioning permissions
+        if self._has_versioning_features(properties):
+            bucket_permissions.extend(
+                ["s3:GetBucketVersioning", "s3:PutBucketVersioning", "s3:ListBucketVersions"]
+            )
+
+        # Policy permissions
+        if self._has_policy_features(properties):
+            bucket_permissions.extend(
+                ["s3:GetBucketPolicy", "s3:PutBucketPolicy", "s3:DeleteBucketPolicy"]
+            )
+
+        # CORS permissions
+        if self._has_cors_features(properties):
+            bucket_permissions.extend(
+                ["s3:GetBucketCors", "s3:PutBucketCors", "s3:DeleteBucketCors"]
+            )
+
+        # Website permissions
+        if self._has_website_features(properties):
+            bucket_permissions.extend(
+                ["s3:GetBucketWebsite", "s3:PutBucketWebsite", "s3:DeleteBucketWebsite"]
+            )
+
+        # ACL permissions
+        if self._has_acl_features(properties):
+            bucket_permissions.extend(["s3:GetBucketAcl", "s3:PutBucketAcl"])
+
+        # Encryption permissions
+        if self._has_encryption_features(properties):
+            bucket_permissions.extend(
+                ["s3:GetBucketEncryption", "s3:PutBucketEncryption", "s3:DeleteBucketEncryption"]
+            )
+
+        # Lifecycle permissions
+        if self._has_lifecycle_features(properties):
+            bucket_permissions.extend(
+                [
+                    "s3:GetBucketLifecycleConfiguration",
+                    "s3:PutBucketLifecycleConfiguration",
+                    "s3:DeleteBucketLifecycleConfiguration",
+                ]
+            )
+
+        # Logging permissions
+        if self._has_logging_features(properties):
+            bucket_permissions.extend(["s3:GetBucketLogging", "s3:PutBucketLogging"])
+
+        # Tagging permissions
+        if self._has_tagging_features(properties):
+            bucket_permissions.extend(["s3:GetBucketTagging", "s3:PutBucketTagging"])
+
+        # Public access block permissions
+        if self._has_public_access_features(properties):
+            bucket_permissions.extend(
+                ["s3:GetBucketPublicAccessBlock", "s3:PutBucketPublicAccessBlock"]
+            )
+
+        # Object lock permissions
+        if self._has_object_lock_features(properties):
+            bucket_permissions.extend(["s3:GetBucketObjectLockConfiguration"])
+
+        # Replication permissions
+        if self._has_replication_features(properties):
+            bucket_permissions.extend(
+                ["s3:GetReplicationConfiguration", "s3:PutReplicationConfiguration"]
+            )
+
+        # Multipart upload permissions
+        bucket_permissions.extend(
+            [
+                "s3:ListBucketMultipartUploads",
+                "s3:ListMultipartUploadParts",
+                "s3:AbortMultipartUpload",
+            ]
+        )
+
+        return list(set(bucket_permissions))  # Remove duplicates
+
+    def _get_s3_object_permissions(self, resource: TerraformResource) -> List[str]:
+        """Get S3 object permissions based on features used."""
+        object_permissions = []
+
+        # Base object permissions
+        base_permissions = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+        object_permissions.extend(base_permissions)
+
+        # Analyze resource properties
+        properties = resource.properties or {}
+
+        # Versioning-related object permissions
+        if self._has_versioning_features(properties):
+            object_permissions.extend(
+                ["s3:GetObjectVersion", "s3:DeleteObjectVersion", "s3:ListObjectVersions"]
+            )
+
+        # ACL permissions for objects
+        if self._has_acl_features(properties):
+            object_permissions.extend(
+                [
+                    "s3:GetObjectAcl",
+                    "s3:PutObjectAcl",
+                    "s3:GetObjectVersionAcl",
+                    "s3:PutObjectVersionAcl",
+                ]
+            )
+
+        # Object tagging
+        if self._has_tagging_features(properties):
+            object_permissions.extend(["s3:GetObjectTagging", "s3:PutObjectTagging"])
+
+        # Object attributes and metadata
+        object_permissions.extend(["s3:GetObjectAttributes", "s3:HeadObject"])
+
+        return list(set(object_permissions))  # Remove duplicates
+
+    def _get_s3_resource_arn(
+        self, resource: TerraformResource, s3_type: str
+    ) -> Union[str, List[str]]:
+        """Get S3 resource ARN based on the S3 type (bucket or object)."""
+        if s3_type == "bucket":
+            # For bucket permissions, return both bucket and bucket/* ARNs
+            if resource.resource_name and resource.resource_name != resource.name:
+                bucket_name = resource.resource_name
+                return [f"arn:aws:s3:::{bucket_name}", f"arn:aws:s3:::{bucket_name}/*"]
+            else:
+                # Fallback to wildcard
+                return ["arn:aws:s3:::*", "arn:aws:s3:::/*"]
+
+        elif s3_type == "object":
+            # For object permissions, return bucket/* ARNs
+            if resource.resource_name and resource.resource_name != resource.name:
+                bucket_name = resource.resource_name
+                return [f"arn:aws:s3:::{bucket_name}/*"]
+            else:
+                # Fallback to wildcard
+                return ["arn:aws:s3:::/*"]
+
+        # Default fallback
+        return "arn:aws:s3:::/*"
+
+    def _get_s3_wildcard_arn(self, s3_type: str) -> str:
+        """Get S3 wildcard ARN based on the S3 type."""
+        if s3_type == "bucket":
+            return "arn:aws:s3:::*"
+        elif s3_type == "object":
+            return "arn:aws:s3:::/*"
+        else:
+            return "arn:aws:s3:::*"
+
+    def _has_versioning_features(self, properties: Dict) -> bool:
+        """Check if resource has versioning-related features."""
+        versioning_indicators = [
+            "versioning",
+            "versioning_configuration",
+            "versioning_enabled",
+            "versioning_mfa_delete",
+            "versioning_status",
+        ]
+        return any(key in str(properties).lower() for key in versioning_indicators)
+
+    def _has_policy_features(self, properties: Dict) -> bool:
+        """Check if resource has policy-related features."""
+        policy_indicators = ["policy", "bucket_policy"]
+        return any(key in str(properties).lower() for key in policy_indicators)
+
+    def _has_cors_features(self, properties: Dict) -> bool:
+        """Check if resource has CORS-related features."""
+        cors_indicators = ["cors_rule", "cors_configuration"]
+        return any(key in str(properties).lower() for key in cors_indicators)
+
+    def _has_website_features(self, properties: Dict) -> bool:
+        """Check if resource has website-related features."""
+        website_indicators = ["website", "website_configuration", "website_endpoint"]
+        return any(key in str(properties).lower() for key in website_indicators)
+
+    def _has_acl_features(self, properties: Dict) -> bool:
+        """Check if resource has ACL-related features."""
+        acl_indicators = ["acl", "access_control_list"]
+        return any(key in str(properties).lower() for key in acl_indicators)
+
+    def _has_encryption_features(self, properties: Dict) -> bool:
+        """Check if resource has encryption-related features."""
+        encryption_indicators = ["encryption", "server_side_encryption", "sse"]
+        return any(key in str(properties).lower() for key in encryption_indicators)
+
+    def _has_lifecycle_features(self, properties: Dict) -> bool:
+        """Check if resource has lifecycle-related features."""
+        lifecycle_indicators = ["lifecycle", "lifecycle_rule", "lifecycle_configuration"]
+        return any(key in str(properties).lower() for key in lifecycle_indicators)
+
+    def _has_logging_features(self, properties: Dict) -> bool:
+        """Check if resource has logging-related features."""
+        logging_indicators = ["logging", "access_logging", "log_bucket"]
+        return any(key in str(properties).lower() for key in logging_indicators)
+
+    def _has_tagging_features(self, properties: Dict) -> bool:
+        """Check if resource has tagging-related features."""
+        return "tags" in properties
+
+    def _has_public_access_features(self, properties: Dict) -> bool:
+        """Check if resource has public access block features."""
+        public_access_indicators = ["public_access_block", "block_public_acls"]
+        return any(key in str(properties).lower() for key in public_access_indicators)
+
+    def _has_object_lock_features(self, properties: Dict) -> bool:
+        """Check if resource has object lock features."""
+        object_lock_indicators = ["object_lock", "object_lock_configuration"]
+        return any(key in str(properties).lower() for key in object_lock_indicators)
+
+    def _has_replication_features(self, properties: Dict) -> bool:
+        """Check if resource has replication features."""
+        replication_indicators = ["replication", "replication_configuration"]
+        return any(key in str(properties).lower() for key in replication_indicators)
 
     def generate_permissions(self) -> List[IAMStatement]:
         """Generate IAM permissions based on discovered AWS services and resources."""
@@ -402,26 +655,50 @@ class TerraformAnalyzer:
                 aws_service = service_mapping.get(service, service)
                 resource_type = parts[-1] if len(parts) > 2 else parts[1]
 
-                # Get permissions for this service/resource type (with dynamic fallback)
-                actions = self._get_dynamic_permissions(aws_service, resource_type)
+                # Special handling for S3 resources - create granular permissions
+                if aws_service == "s3":
+                    s3_permission_groups = self._get_s3_permission_groups(resource)
+                    for s3_group in s3_permission_groups:
+                        service_key = f"s3_{s3_group['type']}"
+                        actions_key = tuple(sorted(s3_group["actions"]))
 
-                # Create a key based on service and permissions (not resource type)
-                service_key = aws_service
-                actions_key = tuple(sorted(actions))  # Use sorted tuple as key for consistency
+                        if service_key not in permission_groups:
+                            permission_groups[service_key] = {}
 
-                if service_key not in permission_groups:
-                    permission_groups[service_key] = {}
+                        if actions_key not in permission_groups[service_key]:
+                            permission_groups[service_key][actions_key] = {
+                                "resources": [],
+                                "resource_types": set(),
+                                "service": "s3",
+                                "actions": s3_group["actions"],
+                                "s3_type": s3_group["type"],
+                            }
 
-                if actions_key not in permission_groups[service_key]:
-                    permission_groups[service_key][actions_key] = {
-                        "resources": [],
-                        "resource_types": set(),
-                        "service": aws_service,
-                        "actions": actions,
-                    }
+                        permission_groups[service_key][actions_key]["resources"].append(resource)
+                        permission_groups[service_key][actions_key]["resource_types"].add(
+                            s3_group["type"]
+                        )
+                else:
+                    # Standard handling for non-S3 resources
+                    actions = self._get_dynamic_permissions(aws_service, resource_type)
 
-                permission_groups[service_key][actions_key]["resources"].append(resource)
-                permission_groups[service_key][actions_key]["resource_types"].add(resource_type)
+                    # Create a key based on service and permissions (not resource type)
+                    service_key = aws_service
+                    actions_key = tuple(sorted(actions))  # Use sorted tuple as key for consistency
+
+                    if service_key not in permission_groups:
+                        permission_groups[service_key] = {}
+
+                    if actions_key not in permission_groups[service_key]:
+                        permission_groups[service_key][actions_key] = {
+                            "resources": [],
+                            "resource_types": set(),
+                            "service": aws_service,
+                            "actions": actions,
+                        }
+
+                    permission_groups[service_key][actions_key]["resources"].append(resource)
+                    permission_groups[service_key][actions_key]["resource_types"].add(resource_type)
 
         # Generate statements for each permission group
         for service_key, action_groups in permission_groups.items():
@@ -432,7 +709,11 @@ class TerraformAnalyzer:
                 actions = group_info["actions"]
 
                 # Create a descriptive SID
-                if len(resource_types) == 1:
+                if aws_service == "s3" and "s3_type" in group_info:
+                    # Special S3 granular SID
+                    s3_type = group_info["s3_type"]
+                    sid = f"S3{s3_type.title()}"
+                elif len(resource_types) == 1:
                     sid = f"{aws_service.title()}{resource_types[0].title()}"
                 else:
                     # Group multiple resource types under the service
@@ -441,9 +722,14 @@ class TerraformAnalyzer:
                 # Generate resource ARNs - either specific or wildcard
                 specific_arns = []
                 for resource in resources:
-                    resource_arn = self._get_resource_arn_for_resource(aws_service, resource)
+                    # Special handling for S3 granular permissions
+                    if aws_service == "s3" and "s3_type" in group_info:
+                        s3_type = group_info["s3_type"]
+                        resource_arn = self._get_s3_resource_arn(resource, s3_type)
+                    else:
+                        resource_arn = self._get_resource_arn_for_resource(aws_service, resource)
 
-                    # Handle both single ARN and list of ARNs (for S3 buckets)
+                    # Handle both single ARN and list of ARNs
                     if isinstance(resource_arn, list):
                         for arn in resource_arn:
                             if arn and arn not in specific_arns:
@@ -457,7 +743,10 @@ class TerraformAnalyzer:
                     final_resource = specific_arns
                 else:
                     # Use the most specific wildcard possible
-                    if len(resource_types) == 1:
+                    if aws_service == "s3" and "s3_type" in group_info:
+                        s3_type = group_info["s3_type"]
+                        final_resource = [self._get_s3_wildcard_arn(s3_type)]
+                    elif len(resource_types) == 1:
                         final_resource = [
                             ARNBuilder.get_resource_arn(aws_service, resource_types[0])
                         ]

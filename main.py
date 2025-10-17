@@ -635,35 +635,8 @@ def interactive_mode():
         else:
             print(f"{CyberCLI.RED}Please enter 1 or 2.{CyberCLI.END}")
 
-    # Ask about cache clearing if AI is enabled
+    # Cache is enabled by default for AI
     clear_cache = False
-    if use_ai:
-        print(f"\n{CyberCLI.CYAN}💾 Cache Management:{CyberCLI.END}")
-        print(
-            f"{CyberCLI.GRAY}TFIAM caches AI responses to save costs. If you've made significant changes to your Terraform code,{CyberCLI.END}"
-        )
-        print(
-            f"{CyberCLI.GRAY}you may want to clear the cache to get fresh AI analysis (this will incur extra costs).{CyberCLI.END}"
-        )
-
-        while True:
-            clear_choice = (
-                input(f"{CyberCLI.CYAN}Would you like to clear the AI cache? (y/n): {CyberCLI.END}")
-                .strip()
-                .lower()
-            )
-            if clear_choice in ["y", "yes"]:
-                clear_cache = True
-                print(
-                    f"{CyberCLI.YELLOW}⚠️  Cache will be cleared - fresh AI analysis will be generated{CyberCLI.END}"
-                )
-                break
-            elif clear_choice in ["n", "no"]:
-                clear_cache = False
-                print(f"{CyberCLI.GREEN}✅ Using cached responses where available{CyberCLI.END}")
-                break
-            else:
-                print(f"{CyberCLI.RED}Please enter 'y' for yes or 'n' for no.{CyberCLI.END}")
 
     # Get output directory
     output_dir = input(
@@ -693,9 +666,9 @@ def show_future_usage(directory, use_ai, output_dir, quiet):
     cmd_parts = ["python main.py", directory]
 
     if use_ai:
-        cmd_parts.append("-ai")
+        cmd_parts.append("--ai")
     else:
-        cmd_parts.append("-no-ai")
+        cmd_parts.append("--no-ai")
 
     if output_dir != "tfiam-output":
         cmd_parts.extend(["--output-dir", output_dir])
@@ -714,6 +687,14 @@ def show_future_usage(directory, use_ai, output_dir, quiet):
             print(
                 f"\n{CyberCLI.YELLOW}⚠️  You'll need to provide your OpenAI API key each time{CyberCLI.END}"
             )
+
+        # Add cache clearing instructions
+        print(f"\n{CyberCLI.GRAY}💾 Cache Management:{CyberCLI.END}")
+        print(
+            f"{CyberCLI.GRAY}TFIAM caches AI responses to save costs. To clear cache and get fresh analysis:{CyberCLI.END}"
+        )
+        clear_cache_command = command.replace("--ai", "--ai --no-cache")
+        print(f"{CyberCLI.CYAN}{CyberCLI.BOLD}{clear_cache_command}{CyberCLI.END}")
 
 
 def main():
@@ -747,8 +728,8 @@ def main():
             add_help=False,  # Disable default help to use our custom one
         )
         parser.add_argument("directory", help="Path to Terraform repository directory")
-        parser.add_argument("-ai", action="store_true", help="Enable AI explanations")
-        parser.add_argument("-no-ai", action="store_true", help="Skip AI explanations (default)")
+        parser.add_argument("--ai", action="store_true", help="Enable AI explanations")
+        parser.add_argument("--no-ai", action="store_true", help="Skip AI explanations (default)")
         parser.add_argument(
             "--output-dir",
             "-o",
@@ -758,12 +739,15 @@ def main():
         parser.add_argument(
             "--quiet", "-q", action="store_true", help="Quiet mode - minimal output"
         )
+        parser.add_argument(
+            "--no-cache", action="store_true", help="Clear AI cache and generate fresh analysis"
+        )
 
         args = parser.parse_args()
 
         directory = args.directory
         use_ai = args.ai
-        clear_cache = False  # Command line mode doesn't support cache clearing for now
+        clear_cache = args.no_cache
         output_dir = args.output_dir
         quiet = args.quiet
 
@@ -845,7 +829,9 @@ def main():
                     f"{CyberCLI.GRAY}This may take a moment as we analyze each IAM statement.{CyberCLI.END}"
                 )
 
-            openai_analyzer = OpenAIAnalyzer(openai_key)
+            openai_analyzer = OpenAIAnalyzer(
+                openai_key, cache_dir=os.path.join(output_dir, ".tfiam-cache")
+            )
 
             # Clear cache if requested
             if clear_cache:

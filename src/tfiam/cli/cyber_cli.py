@@ -51,7 +51,7 @@ class CyberCLI:
     MAGENTA = "\033[95m"
     CYAN = "\033[96m"
     WHITE = "\033[97m"
-    GRAY = "\033[90m"
+    GRAY = "\033[37m"  # Changed from \033[90m (dark gray) to \033[37m (light gray/white)
     BOLD = "\033[1m"
     END = "\033[0m"
 
@@ -164,10 +164,11 @@ def print_cyberpunk_help():
     print("║    directory          Path to Terraform repository                          ║")
     print("║                                                                              ║")
     print("║  OPTIONS:                                                                   ║")
-    print("║    -ai                Enable AI explanations + verification & optimization ║")
-    print("║    -no-ai             Skip AI analysis (default)                           ║")
+    print("║    --ai               Enable AI explanations + verification & optimization ║")
+    print("║    --no-ai            Skip AI analysis (default)                           ║")
     print("║    --output-dir DIR   Output directory (default: tfiam-output)              ║")
     print("║    --quiet, -q        Minimal output                                       ║")
+    print("║    --no-cache         Clear AI cache and generate fresh analysis           ║")
     print("║    --help, -h         Show this help message                               ║")
     print("║                                                                              ║")
     print("║  INTERACTIVE MODE:                                                          ║")
@@ -175,8 +176,9 @@ def print_cyberpunk_help():
     print("║                                                                              ║")
     print("║  EXAMPLES:                                                                  ║")
     print("║    python main.py                                                           ║")
-    print("║    python main.py ./my-terraform -ai                                        ║")
-    print("║    python main.py ./infra -no-ai --output-dir policies                     ║")
+    print("║    python main.py ./my-terraform --ai                                       ║")
+    print("║    python main.py ./infra --no-ai --output-dir policies                     ║")
+    print("║    python main.py ./infra --ai --no-cache                                   ║")
     print("║                                                                              ║")
     print("║  🌟 TFIAM analyzes Terraform files and generates IAM policies with        ║")
     print("║     AI-powered explanations, verification & optimization!                   ║")
