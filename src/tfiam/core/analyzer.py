@@ -400,12 +400,55 @@ class TerraformAnalyzer:
             if bucket_permissions:
                 s3_groups.append({"type": "bucket", "actions": bucket_permissions})
 
-        # Check for object-related features
-        object_permissions = self._get_s3_object_permissions(resource)
-        if object_permissions:
-            s3_groups.append({"type": "object", "actions": object_permissions})
+        # For S3 bucket-related resources (versioning, encryption, etc.),
+        # don't create separate statements but let them contribute to main bucket permissions
+        if resource.type in [
+            "aws_s3_bucket_versioning",
+            "aws_s3_bucket_server_side_encryption_configuration",
+            "aws_s3_bucket_policy",
+            "aws_s3_bucket_cors_configuration",
+            "aws_s3_bucket_website_configuration",
+            "aws_s3_bucket_acl",
+            "aws_s3_bucket_lifecycle_configuration",
+            "aws_s3_bucket_logging",
+            "aws_s3_bucket_notification",
+            "aws_s3_bucket_public_access_block",
+            "aws_s3_bucket_object_lock_configuration",
+            "aws_s3_bucket_replication_configuration",
+        ]:
+            # These resources don't need separate statements
+            # They're configuration resources that work with the main bucket
+            return s3_groups
+
+        # Check for object-related features (only for main S3 bucket)
+        if resource.type == "aws_s3_bucket":
+            object_permissions = self._get_s3_object_permissions(resource)
+            if object_permissions:
+                s3_groups.append({"type": "object", "actions": object_permissions})
 
         return s3_groups
+
+    def _get_related_s3_resources(
+        self, bucket_resource: TerraformResource
+    ) -> List[TerraformResource]:
+        """Get S3 resources that are related to the main bucket (versioning, encryption, etc.)."""
+        related_resources = []
+
+        # Look for resources that reference this bucket
+        bucket_name = bucket_resource.name
+        bucket_reference = f"aws_s3_bucket.{bucket_name}"
+
+        for resource in self.resources:
+            if resource == bucket_resource:
+                continue
+
+            # Check if this resource references the bucket
+            if hasattr(resource, "properties") and resource.properties:
+                bucket_ref = resource.properties.get("bucket", "")
+                if bucket_ref == f"{bucket_reference}.id" or bucket_ref == bucket_reference:
+                    related_resources.append(resource)
+
+        return related_resources
 
     def _get_s3_bucket_permissions(self, resource: TerraformResource) -> List[str]:
         """Get S3 bucket permissions based on features used."""
@@ -422,6 +465,12 @@ class TerraformAnalyzer:
 
         # Analyze resource properties to determine additional permissions needed
         properties = resource.properties or {}
+
+        # Also check for related S3 resources that might need additional permissions
+        related_s3_resources = self._get_related_s3_resources(resource)
+        for related_resource in related_s3_resources:
+            if related_resource.properties:
+                properties.update(related_resource.properties)
 
         # Versioning permissions
         if self._has_versioning_features(properties):
@@ -564,8 +613,18 @@ class TerraformAnalyzer:
         # Default fallback
         return "arn:aws:s3:::/*"
 
-    def _get_s3_wildcard_arn(self, s3_type: str) -> str:
-        """Get S3 wildcard ARN based on the S3 type."""
+    def _get_s3_wildcard_arn(
+        self, s3_type: str, bucket_prefix: str = None
+    ) -> Union[str, List[str]]:
+        """Get S3 wildcard ARN based on the S3 type and bucket prefix."""
+        if bucket_prefix and not bucket_prefix.startswith("${"):
+            # Use specific bucket prefix with wildcard
+            if s3_type == "bucket":
+                return [f"arn:aws:s3:::{bucket_prefix}", f"arn:aws:s3:::{bucket_prefix}/*"]
+            elif s3_type == "object":
+                return [f"arn:aws:s3:::{bucket_prefix}/*"]
+
+        # Fallback to global wildcards only if no specific prefix available
         if s3_type == "bucket":
             return "arn:aws:s3:::*"
         elif s3_type == "object":
@@ -582,7 +641,13 @@ class TerraformAnalyzer:
             "versioning_mfa_delete",
             "versioning_status",
         ]
-        return any(key in str(properties).lower() for key in versioning_indicators)
+        # Check for versioning resource type or versioning-related properties
+        if "versioning" in str(properties).lower():
+            return True
+        # Check for status field which indicates versioning configuration
+        if "status" in properties and properties["status"] in ["Enabled", "Suspended"]:
+            return True
+        return False
 
     def _has_policy_features(self, properties: Dict) -> bool:
         """Check if resource has policy-related features."""
@@ -592,7 +657,16 @@ class TerraformAnalyzer:
     def _has_cors_features(self, properties: Dict) -> bool:
         """Check if resource has CORS-related features."""
         cors_indicators = ["cors_rule", "cors_configuration"]
-        return any(key in str(properties).lower() for key in cors_indicators)
+        if any(key in str(properties).lower() for key in cors_indicators):
+            return True
+        # Check for CORS-related properties
+        cors_properties = [
+            "allowed_headers",
+            "allowed_methods",
+            "allowed_origins",
+            "max_age_seconds",
+        ]
+        return any(key in properties for key in cors_properties)
 
     def _has_website_features(self, properties: Dict) -> bool:
         """Check if resource has website-related features."""
@@ -612,7 +686,16 @@ class TerraformAnalyzer:
     def _has_lifecycle_features(self, properties: Dict) -> bool:
         """Check if resource has lifecycle-related features."""
         lifecycle_indicators = ["lifecycle", "lifecycle_rule", "lifecycle_configuration"]
-        return any(key in str(properties).lower() for key in lifecycle_indicators)
+        if any(key in str(properties).lower() for key in lifecycle_indicators):
+            return True
+        # Check for lifecycle-related properties
+        lifecycle_properties = [
+            "noncurrent_days",
+            "noncurrent_version_expiration",
+            "transition",
+            "expiration",
+        ]
+        return any(key in properties for key in lifecycle_properties)
 
     def _has_logging_features(self, properties: Dict) -> bool:
         """Check if resource has logging-related features."""
@@ -745,7 +828,26 @@ class TerraformAnalyzer:
                     # Use the most specific wildcard possible
                     if aws_service == "s3" and "s3_type" in group_info:
                         s3_type = group_info["s3_type"]
-                        final_resource = [self._get_s3_wildcard_arn(s3_type)]
+                        # Try to extract bucket prefix from resource names
+                        bucket_prefix = None
+                        for resource in resources:
+                            if hasattr(resource, "resource_name") and resource.resource_name:
+                                # Extract prefix from resolved resource name (e.g., "tf-platform-playground-*")
+                                if "*" in resource.resource_name:
+                                    bucket_prefix = resource.resource_name
+                                    break
+                                # Or extract from bucket property if available
+                                elif hasattr(resource, "properties") and resource.properties:
+                                    bucket_value = resource.properties.get("bucket", "")
+                                    if bucket_value and not bucket_value.startswith("${"):
+                                        bucket_prefix = bucket_value
+                                        break
+
+                        wildcard_arn = self._get_s3_wildcard_arn(s3_type, bucket_prefix)
+                        if isinstance(wildcard_arn, list):
+                            final_resource = wildcard_arn
+                        else:
+                            final_resource = [wildcard_arn]
                     elif len(resource_types) == 1:
                         final_resource = [
                             ARNBuilder.get_resource_arn(aws_service, resource_types[0])
