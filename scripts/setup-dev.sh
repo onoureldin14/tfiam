@@ -5,8 +5,27 @@
 
 set -e
 
+# Change to the project root directory (where this script is located)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
 echo "🚀 Setting up TFIAM Development Environment"
 echo "=========================================="
+echo ""
+
+# Change to project root
+cd "$PROJECT_ROOT"
+echo "📁 Working directory: $(pwd)"
+
+# Verify we're in the right place
+if [ ! -f "requirements.txt" ]; then
+    echo "❌ Error: requirements.txt not found in project root"
+    echo "   Make sure you're running this from the TFIAM project directory"
+    echo "   Expected location: $PROJECT_ROOT"
+    exit 1
+fi
+
+echo "✅ Found project files"
 echo ""
 
 # Check if virtual environment exists

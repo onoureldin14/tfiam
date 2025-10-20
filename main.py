@@ -662,8 +662,14 @@ def show_future_usage(directory, use_ai, output_dir, quiet):
     print(f"\n{CyberCLI.GREEN}💡 Future Usage:{CyberCLI.END}")
     print(f"{CyberCLI.GRAY}You can run the same analysis with this command:{CyberCLI.END}")
 
+    # Detect if running via Homebrew or local Python
+    is_homebrew = os.getenv("ORIGINAL_WORKING_DIR") is not None
+
     # Build command
-    cmd_parts = ["python main.py", directory]
+    if is_homebrew:
+        cmd_parts = ["tfiam", directory]
+    else:
+        cmd_parts = ["python3 main.py", directory]
 
     if use_ai:
         cmd_parts.append("--ai")

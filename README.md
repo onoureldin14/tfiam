@@ -97,53 +97,99 @@ tf-ai-permssions/
 ```bash
 # Via Homebrew (recommended)
 brew tap onoureldin14/tfiam
-brew install tfiam
+brew install onoureldin14/tfiam/tfiam
 
 # Manual installation
 git clone https://github.com/onoureldin14/tfiam.git
 cd tfiam
-pip3 install -r requirements.txt
+make dev-setup
 ```
 
 ### Basic Usage
 
+**Option 1: Using Makefile (Recommended for Development)**
 ```bash
-# Interactive mode (no arguments required)
-python main.py
+# Interactive mode
+make interactive
+
+# Run with specific directory (activate venv first)
+source venv/bin/activate
+python3 main.py ./my-terraform-project --ai
+
+# Or use venv Python directly
+./venv/bin/python main.py ./my-terraform-project --ai
+```
+
+**Option 2: Using Homebrew Installation**
+```bash
+# Interactive mode
+tfiam
 
 # Analyze a Terraform directory
-python main.py ./my-terraform-project
+tfiam ./my-terraform-project
 
 # With AI explanations (requires OpenAI API key)
-python main.py ./my-terraform-project -ai
+tfiam ./my-terraform-project --ai
 
 # Skip AI explanations (default)
-python main.py ./my-terraform-project -no-ai
+tfiam ./my-terraform-project --no-ai
 
 # Quiet mode with custom output directory
-python main.py ./my-terraform-project --output-dir policies --quiet
+tfiam ./my-terraform-project --output-dir policies --quiet
+```
+
+**Option 3: Manual Virtual Environment**
+```bash
+# Activate virtual environment first
+source venv/bin/activate
+
+# Then run commands
+python3 main.py ./my-terraform-project --ai
+python3 main.py ./my-terraform-project --no-ai
+python3 main.py ./my-terraform-project --output-dir policies --quiet
 ```
 
 ### Examples
 
+**Using Makefile (Recommended)**
 ```bash
-# Interactive mode with examples
-python main.py
+# Interactive mode
+make interactive
 
-# Test with comprehensive example (includes all features)
-python main.py examples/ -no-ai
-
-# Test with individual feature files
-python main.py examples/test_example.tf -no-ai
-python main.py examples/test_with_variables.tf -no-ai
-python main.py examples/test_dynamic.tf -no-ai
-python main.py examples/test_grouping.tf -no-ai
+# Test with comprehensive example
+./venv/bin/python main.py examples/ --no-ai
 
 # Analyze with AI
-python main.py examples/ -ai
+./venv/bin/python main.py examples/ --ai
 
 # Get help
-python main.py --help
+./venv/bin/python main.py --help
+```
+
+**Using Homebrew Installation**
+```bash
+# Interactive mode
+tfiam
+
+# Test with comprehensive example
+tfiam examples/ --no-ai
+
+# Analyze with AI
+tfiam examples/ --ai
+
+# Get help
+tfiam --help
+```
+
+**Using Virtual Environment**
+```bash
+# Activate virtual environment
+source venv/bin/activate
+
+# Then run examples
+python3 main.py examples/ --no-ai
+python3 main.py examples/ --ai
+python3 main.py --help
 ```
 
 ## 🛠️ Development
@@ -161,13 +207,16 @@ make dev-setup
 
 ```bash
 make help              # Show all available commands
-make test              # Run tests
+make venv              # Create virtual environment
+make install           # Install dependencies (uses venv if available)
+make dev-setup         # Complete development setup
+make test              # Run tests (uses venv if available)
 make test-coverage     # Run tests with coverage
-make lint              # Run linting
-make format            # Format code
+make lint              # Run linting (uses venv if available)
+make format            # Format code (uses venv if available)
+make interactive       # Run interactive mode (uses venv if available)
 make clean             # Clean temporary files
 make demo              # Run demo
-make test-examples     # Test with example files
 make check             # Run linting and tests
 make all               # Full setup and test
 ```
@@ -175,18 +224,25 @@ make all               # Full setup and test
 ### Manual Development Setup
 
 ```bash
+# Option 1: Use Makefile (Recommended)
+make dev-setup
+
+# Option 2: Manual setup
 # Create virtual environment
-python -m venv venv
+python3 -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install dependencies
-make install
+pip install -r requirements.txt
 
-# Install development dependencies
-pip install -r requirements-dev.txt
+# Install development tools
+pip install pytest pytest-cov
 
-# Install pre-commit hooks
+# Setup pre-commit hooks (if .pre-commit-config.yaml exists)
 pre-commit install
+
+# Test installation
+python3 -c "import sys; sys.path.insert(0, 'src'); from tfiam import TerraformAnalyzer; print('✅ Setup complete')"
 ```
 
 ## 🧪 Testing
@@ -483,6 +539,71 @@ python main.py ./terraform-dir --no-openai --quiet
 python main.py ./terraform-dir --openai-key sk-xxx
 python main.py --help
 ```
+
+## 🔧 Troubleshooting
+
+### Common Issues
+
+**Issue: `ModuleNotFoundError: No module named 'openai'`**
+```bash
+# Solution: Use virtual environment
+source venv/bin/activate
+python3 main.py --help
+
+# Or use venv Python directly
+./venv/bin/python main.py --help
+
+# Or use Makefile
+make interactive
+```
+
+**Issue: `make: command not found`**
+```bash
+# Install make (usually pre-installed on macOS/Linux)
+# On macOS with Homebrew:
+brew install make
+
+# On Ubuntu/Debian:
+sudo apt-get install make
+```
+
+**Issue: Script fails to find Terraform files**
+```bash
+# Make sure you're in the right directory
+pwd
+ls *.tf
+
+# Use absolute paths if needed
+./venv/bin/python main.py /full/path/to/terraform/directory
+```
+
+**Issue: OpenAI API connection errors**
+```bash
+# Check your API key
+echo $OPENAI_API_KEY
+
+# Test connection
+./venv/bin/python -c "import openai; print('OpenAI module loaded successfully')"
+
+# Clear cache if needed
+./venv/bin/python main.py . --ai --no-cache
+```
+
+**Issue: Permission denied on scripts**
+```bash
+# Make scripts executable
+chmod +x scripts/*.sh
+
+# Or run directly with bash
+bash scripts/setup-dev.sh
+```
+
+### Getting Help
+
+- **Check installation**: `make help`
+- **Test setup**: `make test`
+- **Verify virtual environment**: `source venv/bin/activate && python3 --version`
+- **Check dependencies**: `pip list | grep openai`
 
 ## 🍺 Homebrew Distribution
 
